@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+import pandas as pd
 import streamlit as st
 
 DATA_FILE = Path("allowance_data.json")
@@ -148,6 +149,16 @@ def sort_transactions_for_display(transactions: list[dict[str, Any]]) -> list[di
     return sorted(transactions, key=lambda transaction: (transaction["date"], transaction["id"]), reverse=True)
 
 
+def transactions_to_dataframe(transactions: list[dict[str, Any]]) -> pd.DataFrame:
+    if not transactions:
+        return pd.DataFrame(columns=["id", "date", "type", "category", "amount", "memo"])
+
+    dataframe = pd.DataFrame(transactions)
+    dataframe["date"] = pd.to_datetime(dataframe["date"], format="%Y-%m-%d")
+    dataframe["amount"] = dataframe["amount"].astype(float)
+    return dataframe
+
+
 def main() -> None:
     initialize_session_state()
 
@@ -241,6 +252,36 @@ def main() -> None:
                 st.session_state.data = data
                 save_data(data)
                 st.rerun()
+
+    st.subheader("お小遣い分析")
+    transaction_dataframe = transactions_to_dataframe(transactions)
+    if transaction_dataframe.empty:
+        st.info("データが登録されるとグラフが表示されます")
+    else:
+        expense_by_category = (
+            transaction_dataframe[transaction_dataframe["type"] == "支出"]
+            .groupby("category")["amount"]
+            .sum()
+            .sort_values(ascending=False)
+        )
+        st.write("カテゴリ別支出")
+        st.bar_chart(expense_by_category)
+
+        balance_trend = (
+            transaction_dataframe.sort_values(["date", "id"])
+            .assign(
+                signed_amount=lambda dataframe: dataframe["amount"].where(
+                    dataframe["type"] == "収入",
+                    -dataframe["amount"],
+                )
+            )
+            .assign(balance=lambda dataframe: dataframe["signed_amount"].cumsum())
+            .groupby("date")["balance"]
+            .last()
+        )
+        balance_trend.index = balance_trend.index.date
+        st.write("日々の累積残高推移")
+        st.line_chart(balance_trend)
 
 
 if __name__ == "__main__":
