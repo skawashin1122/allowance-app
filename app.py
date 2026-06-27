@@ -48,6 +48,24 @@ def initialize_session_state() -> None:
         st.session_state.data = load_data()
     if "goal_reached" not in st.session_state:
         st.session_state.goal_reached = False
+    if "input_date" not in st.session_state:
+        st.session_state.input_date = date.today()
+    if "input_type" not in st.session_state:
+        st.session_state.input_type = "収入"
+    if "input_category" not in st.session_state:
+        st.session_state.input_category = INCOME_CATEGORIES[0]
+    if "input_amount" not in st.session_state:
+        st.session_state.input_amount = 0
+    if "input_memo" not in st.session_state:
+        st.session_state.input_memo = ""
+
+
+def sync_category_with_type() -> None:
+    transaction_type = st.session_state.input_type
+    category_options = INCOME_CATEGORIES if transaction_type == "収入" else EXPENSE_CATEGORIES
+
+    if st.session_state.input_category not in category_options:
+        st.session_state.input_category = category_options[0]
 
 
 def validate_transaction(transaction: Any) -> None:
@@ -167,14 +185,21 @@ def main() -> None:
 
     data = st.session_state.data
     st.subheader("収支を入力")
-    with st.form("transaction_form", clear_on_submit=True):
-        transaction_date = st.date_input("日付", value=date.today())
-        transaction_type = st.radio("タイプ", ["収入", "支出"], horizontal=True)
-        category_options = INCOME_CATEGORIES if transaction_type == "収入" else EXPENSE_CATEGORIES
-        category = st.selectbox("カテゴリ", options=category_options)
-        amount = st.number_input("金額（円）", min_value=0, step=100, value=0)
-        memo = st.text_input("メモ")
-        is_submitted = st.form_submit_button("追加")
+    transaction_date = st.date_input("日付", key="input_date")
+    transaction_type = st.radio(
+        "タイプ",
+        ["収入", "支出"],
+        horizontal=True,
+        key="input_type",
+        on_change=sync_category_with_type,
+    )
+    category_options = INCOME_CATEGORIES if transaction_type == "収入" else EXPENSE_CATEGORIES
+    if st.session_state.input_category not in category_options:
+        st.session_state.input_category = category_options[0]
+    category = st.selectbox("カテゴリ", options=category_options, key="input_category")
+    amount = st.number_input("金額（円）", min_value=0, step=100, key="input_amount")
+    memo = st.text_input("メモ", key="input_memo")
+    is_submitted = st.button("追加")
 
     if is_submitted:
         if amount <= 0:
@@ -191,6 +216,9 @@ def main() -> None:
             st.session_state.data = data
             save_data(data)
             st.success("収支データを追加しました。")
+            st.session_state.input_date = date.today()
+            st.session_state.input_amount = 0
+            st.session_state.input_memo = ""
 
     transactions = data["transactions"]
     goal = float(data["goal"])
