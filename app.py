@@ -4,7 +4,6 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-import pandas as pd
 import streamlit as st
 
 DATA_FILE = Path("allowance_data.json")
@@ -136,22 +135,17 @@ def calculate_progress(balance: float, goal: float) -> tuple[float, float, bool]
     return progress_ratio, percentage, is_goal_achieved
 
 
-def build_transactions_dataframe(transactions: list[dict[str, Any]]) -> pd.DataFrame:
-    if not transactions:
-        return pd.DataFrame(columns=["日付", "種別", "カテゴリ", "金額（円）", "メモ"])
+def remove_transaction_by_id(
+    transactions: list[dict[str, Any]],
+    transaction_id: str,
+) -> list[dict[str, Any]]:
+    if not isinstance(transaction_id, str) or not transaction_id.strip():
+        raise ValueError("transaction_id must be a non-empty string.")
+    return [transaction for transaction in transactions if transaction["id"] != transaction_id]
 
-    dataframe = pd.DataFrame(transactions)
-    dataframe = dataframe.sort_values(by=["date", "id"], ascending=[False, False]).reset_index(drop=True)
-    dataframe = dataframe[["date", "type", "category", "amount", "memo"]].rename(
-        columns={
-            "date": "日付",
-            "type": "種別",
-            "category": "カテゴリ",
-            "amount": "金額（円）",
-            "memo": "メモ",
-        }
-    )
-    return dataframe
+
+def sort_transactions_for_display(transactions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return sorted(transactions, key=lambda transaction: (transaction["date"], transaction["id"]), reverse=True)
 
 
 def main() -> None:
@@ -223,11 +217,30 @@ def main() -> None:
     col2.metric("貯金目標", f"{goal:,.0f}円")
 
     st.subheader("収支履歴")
-    history_df = build_transactions_dataframe(transactions)
-    if history_df.empty:
+    if not transactions:
         st.info("まだ収支データがありません。フォームから追加してください。")
     else:
-        st.dataframe(history_df, use_container_width=True, hide_index=True)
+        header_columns = st.columns([1.4, 1.0, 1.2, 1.0, 2.0, 0.8])
+        header_columns[0].markdown("**日付**")
+        header_columns[1].markdown("**種別**")
+        header_columns[2].markdown("**カテゴリ**")
+        header_columns[3].markdown("**金額（円）**")
+        header_columns[4].markdown("**メモ**")
+        header_columns[5].markdown("**操作**")
+
+        for transaction in sort_transactions_for_display(transactions):
+            row_columns = st.columns([1.4, 1.0, 1.2, 1.0, 2.0, 0.8])
+            row_columns[0].write(transaction["date"])
+            row_columns[1].write(transaction["type"])
+            row_columns[2].write(transaction["category"])
+            row_columns[3].write(f"{float(transaction['amount']):,.0f}円")
+            row_columns[4].write(transaction["memo"])
+
+            if row_columns[5].button("削除", key=f"delete_{transaction['id']}"):
+                data["transactions"] = remove_transaction_by_id(transactions, transaction["id"])
+                st.session_state.data = data
+                save_data(data)
+                st.rerun()
 
 
 if __name__ == "__main__":
