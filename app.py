@@ -180,6 +180,11 @@ def transactions_to_dataframe(transactions: list[dict[str, Any]]) -> pd.DataFram
 def main() -> None:
     initialize_session_state()
 
+    if st.session_state.pop("reset_inputs", False):
+        st.session_state.input_date = date.today()
+        st.session_state.input_amount = 0
+        st.session_state.input_memo = ""
+
     st.title("💰 お小遣い＆バイト代管理帳")
     balance_metric = st.empty()
 
@@ -216,9 +221,8 @@ def main() -> None:
             st.session_state.data = data
             save_data(data)
             st.success("収支データを追加しました。")
-            st.session_state.input_date = date.today()
-            st.session_state.input_amount = 0
-            st.session_state.input_memo = ""
+            st.session_state.reset_inputs = True
+            st.rerun()
 
     transactions = data["transactions"]
     goal = float(data["goal"])
